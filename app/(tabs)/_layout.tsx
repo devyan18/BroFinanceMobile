@@ -1,6 +1,7 @@
 import { useAuth } from "@clerk/clerk-expo";
 import { Tabs } from "expo-router";
 import { ActivityIndicator, View } from "react-native";
+import { CustomTabBar } from "../../components/CustomTabBar";
 
 export default function RootLayout() {
   const { isSignedIn } = useAuth();
@@ -13,9 +14,14 @@ export default function RootLayout() {
     );
 
   return (
-    <Tabs screenOptions={{ headerShown: false }}>
+    <Tabs
+      screenOptions={{ headerShown: false }}
+      tabBar={(props) => <CustomTabBar {...props} />}
+    >
       <Tabs.Screen name="home" />
-      <Tabs.Screen name="settings" />
+      <Tabs.Screen name="balance" />
+      <Tabs.Screen name="graphs" />
+      <Tabs.Screen name="config" />
     </Tabs>
   );
 }

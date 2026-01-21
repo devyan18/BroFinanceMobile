@@ -1,166 +1,177 @@
-import React from "react";
+import React, { useRef } from "react";
 import { useRouter } from "expo-router";
-import { useAuth, useSignIn, useSSO, useUser } from "@clerk/clerk-expo";
+import { useSignIn, useSSO } from "@clerk/clerk-expo";
 import {
-  ActivityIndicator,
-  Button,
-  Text,
-  TextInput,
-  TouchableOpacity,
   View,
+  Text,
+  ActivityIndicator,
   Alert,
-  StyleSheet,
+  TouchableOpacity,
+  StatusBar,
 } from "react-native";
 
-export default function Page() {
+import { FontAwesome } from "@expo/vector-icons";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
+import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
+import FormInput from "../../components/FormInput";
+import SubmitButton from "../../components/SubmitButton";
+
+// Esquema Zod (Sin cambios en lógica)
+const signInSchema = z.object({
+  emailAddress: z.email("Email inválido"),
+  password: z.string().min(8, "Mínimo 8 caracteres"),
+});
+
+type SignInFormData = z.infer<typeof signInSchema>;
+
+export default function SignInScreen() {
   const router = useRouter();
-
-  /* --- SSO (Google) --- */
   const { startSSOFlow } = useSSO();
+  const { signIn, setActive, isLoaded } = useSignIn();
 
+  const {
+    control,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<SignInFormData>({
+    resolver: zodResolver(signInSchema),
+  });
+
+  /* Lógica de Google (Sin cambios) */
   const handleGoogleSignIn = async () => {
     try {
       const result = await startSSOFlow({ strategy: "oauth_google" });
-
       if (result.signUp?.status === "missing_requirements") {
-        router.push({
-          pathname: "/complete-signup",
-        });
+        router.push({ pathname: "/complete-signup" });
         return;
       }
-
-      const { createdSessionId, setActive } = result;
-
-      if (createdSessionId && setActive) {
-        await setActive({ session: createdSessionId });
+      if (result.createdSessionId && result.setActive) {
+        await result.setActive({ session: result.createdSessionId });
         router.replace("/home");
-      } else {
-        console.error("SSO did not create session:", result);
       }
-    } catch (error: any) {
-      console.error("Google SSO failed:", error);
-      Alert.alert("Error", "Failed to sign in with Google.");
+    } catch (error) {
+      Alert.alert("Error", "Fallo al iniciar con Google.");
     }
   };
 
-  /* --- Email/Password Sign In --- */
-  const { signIn, setActive, isLoaded: isSignInLoaded } = useSignIn();
-
-  const [emailAddress, setEmailAddress] = React.useState("");
-  const [password, setPassword] = React.useState("");
-  const [loading, setLoading] = React.useState(false);
-
-  const handleEmailSignIn = async () => {
-    if (!isSignInLoaded) return;
-
-    setLoading(true);
-
+  /* Lógica de Email (Sin cambios) */
+  const onSignInPress = async (data: SignInFormData) => {
+    if (!isLoaded) return;
     try {
       const attempt = await signIn.create({
-        identifier: emailAddress,
-        password,
+        identifier: data.emailAddress,
+        password: data.password,
       });
-
       if (attempt.status === "complete" && attempt.createdSessionId) {
         await setActive({ session: attempt.createdSessionId });
         router.replace("/home");
       } else {
-        console.warn("Additional verification required:", attempt);
-        // Aquí podrías manejar MFA o email_code si corresponde
+        console.warn("Verificación requerida", attempt);
       }
     } catch (err: any) {
-      console.error("Sign in error:", err);
-      Alert.alert("Error", "Email sign in failed.");
-    } finally {
-      setLoading(false);
+      Alert.alert(
+        "Error",
+        err.errors?.[0]?.message || "Error al iniciar sesión.",
+      );
+      console.log({ err });
     }
   };
 
-  /* --- Loading States --- */
-  if (!isSignInLoaded)
+  const passwordRef = useRef<any>(null);
+
+  if (!isLoaded)
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" />
+      <View className="flex-1 bg-black justify-center items-center">
+        <ActivityIndicator size="large" color="#26b901ff" />
       </View>
     );
 
   return (
-    <View style={styles.container}>
-      {/* 👇 Google Sign In */}
-      <Button title="Sign in with Google" onPress={handleGoogleSignIn} />
+    <KeyboardAwareScrollView
+      style={{ flex: 1, backgroundColor: "#000" }}
+      contentContainerStyle={{
+        flexGrow: 1,
+        justifyContent: "center",
+        padding: 24,
+      }}
+      enableOnAndroid={true}
+      extraScrollHeight={20} // Espacio extra sobre el teclado
+    >
+      <View className="flex-1 px-6 justify-center">
+        {/* Header estilo 'Lemon' */}
+        <View className="mb-10">
+          <Text className="text-white text-4xl font-black tracking-tighter">
+            Bro <Text className="text-[#26b901ff]">Finance</Text>
+          </Text>
+          <Text className="text-neutral-400 text-lg mt-2 font-medium">
+            Welcome back!
+          </Text>
+        </View>
 
-      {/* --- Divider --- */}
-      <View style={styles.divider}>
-        <Text style={{ color: "#888" }}>OR</Text>
+        {/* Formulario */}
+        <View className="space-y-4">
+          <FormInput
+            onSubmitEditing={() => passwordRef.current?.focus()}
+            returnKeyType="next"
+            label="Email"
+            placeholder="email@example.com"
+            autoCapitalize="none"
+            keyboardType="email-address"
+            control={control}
+            name="emailAddress"
+            error={errors.emailAddress?.message}
+          />
+
+          <FormInput
+            ref={passwordRef}
+            returnKeyType="done"
+            label="Password"
+            placeholder="••••••••"
+            secureTextEntry
+            control={control}
+            name="password"
+            error={errors.password?.message}
+          />
+        </View>
+
+        <View className="mt-8">
+          <SubmitButton
+            title="Login"
+            onPress={handleSubmit(onSignInPress)}
+            loading={isSubmitting}
+            variant="primary" // Botón verde neón degradado
+          />
+        </View>
+
+        {/* Separador */}
+        <View className="flex-row items-center my-8">
+          <View className="flex-1 h-[1px] bg-neutral-800" />
+          <Text className="mx-4 text-neutral-500 font-medium">
+            Or continue with
+          </Text>
+          <View className="flex-1 h-[1px] bg-neutral-800" />
+        </View>
+
+        <SubmitButton
+          title="Google"
+          icon={<FontAwesome name="google" size={20} color="#fff" />}
+          onPress={handleGoogleSignIn}
+          variant="google" // Botón gris oscuro
+        />
+
+        {/* Footer Link */}
+        <TouchableOpacity
+          className="mt-6 items-center"
+          onPress={() => router.push("/sign-up")}
+        >
+          <Text className="text-neutral-400">
+            Do you not have an account?{"  "}
+            <Text className="text-[#26b901ff] font-bold">Sign Up</Text>
+          </Text>
+        </TouchableOpacity>
       </View>
-
-      {/* 👇 Email / Password */}
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        autoCapitalize="none"
-        onChangeText={setEmailAddress}
-        value={emailAddress}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Password"
-        secureTextEntry
-        onChangeText={setPassword}
-        value={password}
-      />
-
-      <TouchableOpacity onPress={handleEmailSignIn} style={styles.btn}>
-        {loading ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.btnText}>Continue</Text>
-        )}
-      </TouchableOpacity>
-
-      <TouchableOpacity onPress={() => router.push("/sign-up")}>
-        <Text style={styles.linkText}>Don't have an account? Sign up</Text>
-      </TouchableOpacity>
-    </View>
+    </KeyboardAwareScrollView>
   );
 }
-
-/* --- Estilos simples --- */
-const styles = StyleSheet.create({
-  container: {
-    padding: 20,
-    gap: 15,
-  },
-  centered: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: "#ccc",
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 10,
-  },
-  btn: {
-    backgroundColor: "#3b82f6",
-    padding: 12,
-    borderRadius: 8,
-    alignItems: "center",
-    marginTop: 10,
-  },
-  btnText: {
-    color: "#fff",
-    fontWeight: "bold",
-  },
-  linkText: {
-    marginTop: 15,
-    color: "#3b82f6",
-    textAlign: "center",
-  },
-  divider: {
-    alignItems: "center",
-    marginVertical: 15,
-  },
-});
